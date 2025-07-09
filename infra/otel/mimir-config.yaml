@@ -1,0 +1,22 @@
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9009
+
+blocks_storage:
+  backend: filesystem
+  filesystem:
+    dir: /tmp/mimir/blocks
+  tsdb:
+    dir: /tmp/mimir/tsdb
+
+ingester:
+  ring:
+    kvstore:
+      store: inmemory
+    replication_factor: 1
+
+ruler_storage:
+  backend: filesystem
+  local:
+    directory: /tmp/mimir/rules
