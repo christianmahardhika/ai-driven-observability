@@ -3,12 +3,16 @@ datasources:
   - name: Loki
     type: loki
     access: proxy
-    url: http://loki:3100
+    url: http://observability-loki-1:3100
   - name: Tempo
     type: tempo
     access: proxy
-    url: http://tempo:3200
+    url: http://observability-tempo-1:3200
   - name: Mimir
     type: prometheus
     access: proxy
-    url: http://mimir:9009
+    url: http://observability-mimir-1:9009/prometheus
+    isDefault: true
+    jsonData:
+      prometheusType: mimir
+      tlsSkipVerify: true

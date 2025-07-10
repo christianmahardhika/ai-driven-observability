@@ -1,6 +1,6 @@
 otelcol.receiver.otlp "default" {
-  grpc { endpoint = "0.0.0.0:4317" }
-  http { endpoint = "0.0.0.0:4318" }
+  grpc { }
+  http { }
   output {
     metrics = [otelcol.processor.batch.default.input]
     logs    = [otelcol.processor.batch.default.input]
@@ -10,7 +10,7 @@ otelcol.receiver.otlp "default" {
 
 otelcol.processor.batch "default" {
   output {
-    metrics = [prometheus.remote_write.mimir.input]
+    metrics = [otelcol.exporter.prometheus.default.input]
     logs    = [otelcol.exporter.loki.default.input]
     traces  = [otelcol.exporter.otlp.tempo.input]
   }
@@ -18,16 +18,29 @@ otelcol.processor.batch "default" {
 
 prometheus.remote_write "mimir" {
   endpoint {
-    url = "http://mimir:9009/api/v1/push"
+    url = "http://observability-mimir-1:9009/api/v1/push"
+  }
+}
+
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+loki.write "default" {
+  endpoint { 
+    url = "http://observability-loki-1:3100/loki/api/v1/push"
   }
 }
 
 otelcol.exporter.loki "default" {
-  endpoint = "http://loki:3100/loki/api/v1/push"
+  forward_to = [loki.write.default.receiver]
 }
 
 otelcol.exporter.otlp "tempo" {
   client {
-    endpoint = "tempo:4317"
+    endpoint = "http://observability-tempo-1:4317"
+    tls {
+			insecure = true
+		}
   }
 }
