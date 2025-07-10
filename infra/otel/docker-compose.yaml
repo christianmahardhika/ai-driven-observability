@@ -56,9 +56,9 @@ services:
     entrypoint: >
       /bin/sh -c "
         sleep 5;
-        /usr/bin/mc alias set myminio http://minio:9000 minioAccessKey minioSecretKey;
-        /usr/bin/mc mb mimir-blocks;
-        /usr/bin/mc mb mimir-ruler;
+        /usr/bin/mc alias set myminio http://minio:9000 mimir supersecret;
+        /usr/bin/mc mb myminio/mimir-blocks;
+        /usr/bin/mc mb myminio/mimir-ruler;
         exit 0;
       "
     restart: on-failure

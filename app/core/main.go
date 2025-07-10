@@ -167,6 +167,8 @@ func initOpenTelemetry(ctx context.Context, serviceName string) func() {
 		if err := mp.Shutdown(ctx); err != nil {
 			logrus.WithContext(ctx).Error("Error shutting down meter provider: %v", err)
 		}
+		// defer provider.Shutdown(ctx) // Uncomment this line if you want to shutdown the provider gracefully
+		provider.Shutdown(ctx)
 	}
 }
 
