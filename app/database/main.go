@@ -149,7 +149,7 @@ func initOpenTelemetry(ctx context.Context, serviceName string) func() {
 	provider := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)),
 	)
-	defer provider.Shutdown(ctx)
+	// defer provider.Shutdown(ctx) // Uncomment this line if you want to shutdown the provider gracefully 
 
 	// Set the global logger provider
 	global.SetLoggerProvider(provider)
@@ -232,7 +232,7 @@ func incidentSimulator(ctx context.Context) {
 					incident := incidents[rand.Intn(len(incidents))]
 					atomic.StoreInt64(&incidentActive, 1)
 					incidentType = incident
-					logrus.WithContext(ctx).Info(1, "🚨 DATABASE INCIDENT STARTED: %s", incident)
+					logrus.WithContext(ctx).Info(1, fmt.Sprintf("🚨 DATABASE INCIDENT DETECTED: %s", incident))
 
 					// Incident duration: 15-90 seconds
 					duration := time.Duration(15+rand.Intn(75)) * time.Second
@@ -240,7 +240,7 @@ func incidentSimulator(ctx context.Context) {
 						time.Sleep(duration)
 						atomic.StoreInt64(&incidentActive, 0)
 						incidentType = "none"
-						logrus.WithContext(ctx).Info(1, "✅ DATABASE INCIDENT RESOLVED: %s", incident)
+						logrus.WithContext(ctx).Info(1, fmt.Sprintf("✅ DATABASE INCIDENT RESOLVED: %s", incident))
 					}()
 				}
 			}
@@ -386,7 +386,7 @@ func startDatabaseService() {
 			}
 		}
 
-		logrus.WithContext(ctx).Info(1, "✅ Database query successful: %s for user %s", req.Operation, req.UserID)
+		logrus.WithContext(ctx).Info(1, fmt.Sprintf("✅ Database query successful: %s - %s", req.Operation, responseData))
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(DatabaseResponse{
 			Status:    "success",

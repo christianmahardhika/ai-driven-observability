@@ -30,8 +30,6 @@ github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOf
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
 go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
-go.opentelemetry.io/contrib/bridges/otellogr v0.12.0 h1:iXyGIujdWdHJCOar2eYeAmYlqWuM529ZsefXbpGHVlg=
-go.opentelemetry.io/contrib/bridges/otellogr v0.12.0/go.mod h1:MD8ykDDauybfNJdSma0VmGeEB7ygqUYVcbDCRmLuIFk=
 go.opentelemetry.io/contrib/bridges/otellogrus v0.12.0 h1:dNQHw8xYc3YCOtde27gatFqC+LEPwYT61DgAeIxa9Yk=
 go.opentelemetry.io/contrib/bridges/otellogrus v0.12.0/go.mod h1:Dj6X/4oI+1DPZLLbM941pVwu2FODzV27npVygQjDJKY=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.62.0 h1:Hf9xI/XLML9ElpiHVDNwvqI0hIFlzV8dgIr35kV1kRU=

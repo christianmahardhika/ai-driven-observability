@@ -143,7 +143,10 @@ func initOpenTelemetry(ctx context.Context, serviceName string) func() {
 	provider := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)),
 	)
-	defer provider.Shutdown(ctx)
+	if provider == nil {
+		log.Fatalf("failed to create LoggerProvider")
+	}
+	// defer provider.Shutdown(ctx) // Uncomment this line if you want to shutdown the provider gracefully
 
 	// Set the global logger provider
 	global.SetLoggerProvider(provider)
