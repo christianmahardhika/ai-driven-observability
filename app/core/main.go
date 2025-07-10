@@ -13,14 +13,19 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -57,7 +62,7 @@ func main() {
 	defer shutdown()
 
 	// Initialize metrics
-	initMetrics()
+	initMetrics(ctx)
 
 	// Get database service URL from environment
 	dbServiceURL := os.Getenv("DB_SERVICE_URL")
@@ -125,6 +130,28 @@ func initOpenTelemetry(ctx context.Context, serviceName string) func() {
 	)
 	otel.SetMeterProvider(mp)
 
+	// Log Provider
+	exporter, err := otlploghttp.New(ctx,
+		otlploghttp.WithEndpoint(otlpEndpoint), // Collector endpoint
+		otlploghttp.WithInsecure(),             // Use HTTP (not HTTPS)
+	)
+	if err != nil {
+		log.Fatalf("failed to create OTLP log exporter: %v", err)
+	}
+
+	// Set up the LoggerProvider with a batch processor
+	provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)),
+	)
+	defer provider.Shutdown(ctx)
+
+	// Set the global logger provider
+	global.SetLoggerProvider(provider)
+
+	// Set up Logrus and bridge it to OpenTelemetry
+	hook := otellogrus.NewHook("database-service", otellogrus.WithLoggerProvider(provider))
+	logrus.AddHook(hook)
+
 	// Text map propagator
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
@@ -132,40 +159,40 @@ func initOpenTelemetry(ctx context.Context, serviceName string) func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := tp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
+			logrus.WithContext(ctx).Error("Error shutting down tracer provider: %v", err)
 		}
 		if err := mp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down meter provider: %v", err)
+			logrus.WithContext(ctx).Error("Error shutting down meter provider: %v", err)
 		}
 	}
 }
 
-func initMetrics() {
+func initMetrics(ctx context.Context) {
 	meter := otel.Meter("core-api-service")
 
 	var err error
 	transactionCounter, err = meter.Int64Counter("api_transactions_total",
 		metric.WithDescription("Total number of API transactions processed"))
 	if err != nil {
-		log.Fatalf("Failed to create transaction counter: %v", err)
+		logrus.WithContext(ctx).Error("Failed to create transaction counter: %v", err)
 	}
 
 	errorCounter, err = meter.Int64Counter("api_errors_total",
 		metric.WithDescription("Total number of API errors encountered"))
 	if err != nil {
-		log.Fatalf("Failed to create error counter: %v", err)
+		logrus.WithContext(ctx).Error("Failed to create error counter: %v", err)
 	}
 
 	responseTime, err = meter.Float64Histogram("api_response_time_seconds",
 		metric.WithDescription("API response time in seconds"))
 	if err != nil {
-		log.Fatalf("Failed to create response time histogram: %v", err)
+		logrus.WithContext(ctx).Error("Failed to create response time histogram: %v", err)
 	}
 
 	dbCallDuration, err = meter.Float64Histogram("db_call_duration_seconds",
 		metric.WithDescription("Database service call duration in seconds"))
 	if err != nil {
-		log.Fatalf("Failed to create db call duration histogram: %v", err)
+		logrus.WithContext(ctx).Error("Failed to create db call duration histogram: %v", err)
 	}
 }
 
@@ -227,7 +254,7 @@ func startCoreService(dbServiceURL string) {
 			attribute.String("transaction.operation", req.Operation),
 		)
 
-		log.Printf("🔄 Processing transaction: %s for user: %s", transactionID, req.UserID)
+		logrus.WithContext(ctx).Info("🔄 Processing transaction: %s for user: %s", transactionID, req.UserID)
 
 		// Business logic validation
 		span.SetStatus(codes.Error, "invalid amount")
@@ -263,7 +290,7 @@ func startCoreService(dbServiceURL string) {
 				attribute.String("error_type", "database_error"),
 			))
 
-			log.Printf("❌ Transaction failed: %s - Database error: %v", transactionID, err)
+			logrus.WithContext(ctx).Error("❌ Transaction failed: %s - Database error: %v", transactionID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(TransactionResponse{
 				TransactionID: transactionID,
@@ -280,7 +307,7 @@ func startCoreService(dbServiceURL string) {
 			attribute.String("operation", req.Operation),
 		))
 
-		log.Printf("✅ Transaction successful: %s", transactionID)
+		logrus.WithContext(ctx).Info("✅ Transaction successful: %s", transactionID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(TransactionResponse{
 			TransactionID: transactionID,

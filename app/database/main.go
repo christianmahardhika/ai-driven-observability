@@ -12,15 +12,21 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
+
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -64,10 +70,10 @@ func main() {
 	defer shutdown()
 
 	// Initialize metrics
-	initMetrics()
+	initMetrics(ctx)
 
 	// Start background incident simulator
-	go incidentSimulator()
+	go incidentSimulator(ctx)
 
 	// Start database service
 	startDatabaseService()
@@ -130,6 +136,27 @@ func initOpenTelemetry(ctx context.Context, serviceName string) func() {
 	otel.SetMeterProvider(mp)
 	otel.SetMeterProvider(mp)
 
+	// Log Provider
+	exporter, err := otlploghttp.New(ctx,
+		otlploghttp.WithEndpoint(otlpEndpoint), // Collector endpoint
+		otlploghttp.WithInsecure(),             // Use HTTP (not HTTPS)
+	)
+	if err != nil {
+		log.Fatalf("failed to create OTLP log exporter: %v", err)
+	}
+
+	// Set up the LoggerProvider with a batch processor
+	provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)),
+	)
+	defer provider.Shutdown(ctx)
+
+	// Set the global logger provider
+	global.SetLoggerProvider(provider)
+
+	// Set up Logrus and bridge it to OpenTelemetry
+	hook := otellogrus.NewHook("database-service", otellogrus.WithLoggerProvider(provider))
+	logrus.AddHook(hook)
 	// Text map propagator
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
@@ -137,46 +164,46 @@ func initOpenTelemetry(ctx context.Context, serviceName string) func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := tp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
+			logrus.WithContext(ctx).Error(err, "error", "shutting down trace provider")
 		}
 		if err := mp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down meter provider: %v", err)
+			logrus.WithContext(ctx).Error(err, "shutting down meter provider")
 		}
 	}
 }
 
-func initMetrics() {
+func initMetrics(ctx context.Context) {
 	meter := otel.Meter("database-service")
 
 	var err error
 	queryCounter, err = meter.Int64Counter("db_queries_total",
 		metric.WithDescription("Total number of database queries processed"))
 	if err != nil {
-		log.Fatalf("Failed to create query counter: %v", err)
+		logrus.WithContext(ctx).Error(err, "Failed to create query counter")
 	}
 
 	errorCounter, err = meter.Int64Counter("db_errors_total",
 		metric.WithDescription("Total number of database errors encountered"))
 	if err != nil {
-		log.Fatalf("Failed to create error counter: %v", err)
+		logrus.WithContext(ctx).Error(err, "Failed to create error counter")
 	}
 
 	queryDuration, err = meter.Float64Histogram("db_query_duration_seconds",
 		metric.WithDescription("Database query duration in seconds"))
 	if err != nil {
-		log.Fatalf("Failed to create query duration histogram: %v", err)
+		logrus.WithContext(ctx).Error(err, "Failed to create query duration histogram")
 	}
 
 	dbConnections, err = meter.Int64UpDownCounter("db_connections_active",
 		metric.WithDescription("Number of active database connections"))
 	if err != nil {
-		log.Fatalf("Failed to create db connections counter: %v", err)
+		logrus.WithContext(ctx).Error(err, "Failed to create db connections counter")
 	}
 
 	incidentGauge, err = meter.Int64ObservableGauge("db_incident_active",
 		metric.WithDescription("Whether a database incident is currently active"))
 	if err != nil {
-		log.Fatalf("Failed to create incident gauge: %v", err)
+		logrus.WithContext(ctx).Error(err, "Failed to create incident gauge")
 	}
 
 	// Register callback for incident gauge
@@ -186,11 +213,11 @@ func initMetrics() {
 		return nil
 	}, incidentGauge)
 	if err != nil {
-		log.Fatalf("Failed to register incident gauge callback: %v", err)
+		logrus.WithContext(ctx).Error(err, "Failed to register incident gauge callback")
 	}
 }
 
-func incidentSimulator() {
+func incidentSimulator(ctx context.Context) {
 	ticker := time.NewTicker(45 * time.Second)
 	defer ticker.Stop()
 
@@ -205,7 +232,7 @@ func incidentSimulator() {
 					incident := incidents[rand.Intn(len(incidents))]
 					atomic.StoreInt64(&incidentActive, 1)
 					incidentType = incident
-					log.Printf("🚨 DATABASE INCIDENT STARTED: %s", incident)
+					logrus.WithContext(ctx).Info(1, "🚨 DATABASE INCIDENT STARTED: %s", incident)
 
 					// Incident duration: 15-90 seconds
 					duration := time.Duration(15+rand.Intn(75)) * time.Second
@@ -213,7 +240,7 @@ func incidentSimulator() {
 						time.Sleep(duration)
 						atomic.StoreInt64(&incidentActive, 0)
 						incidentType = "none"
-						log.Printf("✅ DATABASE INCIDENT RESOLVED: %s", incident)
+						logrus.WithContext(ctx).Info(1, "✅ DATABASE INCIDENT RESOLVED: %s", incident)
 					}()
 				}
 			}
@@ -319,7 +346,7 @@ func startDatabaseService() {
 				attribute.String("operation", req.Operation),
 			))
 
-			log.Printf("❌ Database query failed: %s - %s", req.Operation, errorMsg)
+			logrus.WithContext(ctx).Error(fmt.Errorf("❌ Database query failed: %s - %s", req.Operation, errorMsg))
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(DatabaseResponse{
 				Status:    "error",
@@ -359,7 +386,7 @@ func startDatabaseService() {
 			}
 		}
 
-		log.Printf("✅ Database query successful: %s for user %s", req.Operation, req.UserID)
+		logrus.WithContext(ctx).Info(1, "✅ Database query successful: %s for user %s", req.Operation, req.UserID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(DatabaseResponse{
 			Status:    "success",
