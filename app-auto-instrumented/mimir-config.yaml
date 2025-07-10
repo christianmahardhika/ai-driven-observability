@@ -1,0 +1,30 @@
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9009
+
+ingester:
+  ring:
+    replication_factor: 1 # not recomended in production
+
+blocks_storage:
+  backend: s3
+  s3:
+    endpoint: minio:9000
+    bucket_name: mimir-blocks
+    access_key_id: mimir
+    secret_access_key: supersecret
+    insecure: true
+  tsdb:
+    dir: /tmp/mimir/tsdb
+
+ruler:
+  enable_api: true
+ruler_storage:
+  backend: s3
+  s3:
+    endpoint: minio:9000
+    bucket_name: mimir-ruler
+    access_key_id: mimir
+    secret_access_key: supersecret
+    insecure: true

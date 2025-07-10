@@ -1,0 +1,23 @@
+discovery:
+  services:
+    - exe_path: /usr/local/bin/database-service
+
+network:
+  enable: true
+
+otel:
+  endpoint: http://alloy:4318
+  insecure: true
+  traces:
+    sampler: always_on
+  metrics:
+    interval: 5s
+  logs:
+    submit: opentelemetry
+    level: info
+
+log_level: debug
+
+http_request_trace: true
+
+print_traces: true
